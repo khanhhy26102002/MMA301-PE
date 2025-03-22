@@ -9,75 +9,101 @@ import {
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation } from "@react-navigation/native";
 
 export default function HomeScreen() {
   const [players, setPlayers] = useState([]);
   const [favourites, setFavourites] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [selectedTeam] = useState(null);
+  const navigation = useNavigation();
+  const checkStoredFavorites = async () => {
+    const data = await AsyncStorage.getItem("favourites");
+    console.log("Dữ liệu trong AsyncStorage:", data);
+  };
+  useEffect(() => {
+    fetchData();
+    loadFavourites();
+    checkStoredFavorites();
+  }, []);
+
   const fetchData = async () => {
-    const response = await axios.get(
-      `https://67c7202cc19eb8753e78b99e.mockapi.io/Players`
-    );
-    if (response.status >= 200 && response.status < 300) {
-      setPlayers(response.data.sort((a, b) => b.id - a.id));
-    } else {
-      throw new Error(`HTTP Status:${response.status}`);
+    try {
+      const response = await axios.get(
+        `https://67c7202cc19eb8753e78b99e.mockapi.io/Players`
+      );
+      if (response.status >= 200 && response.status < 300) {
+        setPlayers(response.data.sort((a, b) => b.id - a.id));
+      } else {
+        throw new Error(`HTTP Status:${response.status}`);
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
     }
   };
-  useEffect(
-    () => {
-      fetchData();
-      loadFavourites();
-    },
-    [players]
-  );
+
   const loadFavourites = async () => {
     try {
       const storedFavorites = await AsyncStorage.getItem("favourites");
       if (storedFavorites) {
-        setFavourites(JSON.stringify(storedFavorites));
+        setFavourites(JSON.parse(storedFavorites));
       }
     } catch (error) {
-      console.error("Lỗi khi tải danh sách yêu thích:", error);
+      console.error("Error loading favorites:", error);
     }
   };
-  const toggleFavorite = async player => {
-    let updatedFavorites = [...favourites];
-    if (favourites.some(fav => fav.id === player.id)) {
-      updatedFavorites = updatedFavorites.filter(fav => fav.id !== player.id);
-    } else {
-      updatedFavorites.push(player);
+
+  const toggleFavorite = async (player) => {
+    try {
+      let storedFavorites = await AsyncStorage.getItem("favourites");
+      let favorites = storedFavorites ? JSON.parse(storedFavorites) : [];
+      let updatedFavorites;
+
+      if (favorites.some((fav) => fav.id === player.id)) {
+        updatedFavorites = favorites.filter((fav) => fav.id !== player.id);
+      } else {
+        updatedFavorites = [...favorites, player];
+      }
+
+      await AsyncStorage.setItem(
+        "favourites",
+        JSON.stringify(updatedFavorites)
+      );
+      setFavourites(updatedFavorites);
+      console.log("Danh sách yêu thích sau khi cập nhật:", updatedFavorites);
+    } catch (error) {
+      console.error("Lỗi khi cập nhật danh sách yêu thích:", error);
     }
-    setFavourites(updatedFavorites);
-    await AsyncStorage.setItem("favorites", JSON.stringify(updatedFavorites));
   };
+
   const filteredPlayers = selectedTeam
-    ? players.filter(player => player.team === selectedTeam)
+    ? players.filter((player) => player.team === selectedTeam)
     : players;
+
   return (
     <View style={styles.container}>
       <FlatList
         data={filteredPlayers}
-        keyExtractor={item => item.id.toString()}
-        renderItem={({ item }) =>
-          <View style={[styles.card, item.isCaptain && styles.captain]}>
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={[styles.card, item.isCaptain && styles.captain]}
+            onPress={() => navigation.navigate("Detail", { id: item.id })}
+          >
             <Image source={{ uri: item.image }} style={styles.image} />
             <View style={styles.info}>
-              <Text style={styles.name}>
-                {item.playerName}
-              </Text>
-              <Text style={styles.details}>
-                Position:{item.position} | Age:{item.age}
-              </Text>
-              {item.isCaptain &&
-                <Text style={styles.captainTag}>🏆 Captain</Text>}
+              <Text style={styles.name}>{item.playerName}</Text>
+              <Text style={styles.details}>Position: {item.position}</Text>
+              {item.isCaptain && (
+                <Text style={styles.captainTag}>🏆 Captain</Text>
+              )}
             </View>
             <TouchableOpacity onPress={() => toggleFavorite(item)}>
               <Text style={styles.favoriteIcon}>
-                {favourites.some(fav => fav.id === item.id) ? "❤️" : "🤍"}
+                {favourites.some((fav) => fav.id === item.id) ? "❤️" : "🤍"}
               </Text>
             </TouchableOpacity>
-          </View>}
+          </TouchableOpacity>
+        )}
       />
     </View>
   );
@@ -88,22 +114,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 10,
     backgroundColor: "#f8f8f8"
-  },
-  teamFilter: {
-    flexDirection: "row",
-    marginBottom: 10
-  },
-  teamButton: {
-    padding: 10,
-    borderRadius: 5,
-    marginHorizontal: 5,
-    backgroundColor: "#ddd"
-  },
-  activeTeam: {
-    backgroundColor: "#ff6347"
-  },
-  teamText: {
-    fontWeight: "bold"
   },
   card: {
     flexDirection: "row",
